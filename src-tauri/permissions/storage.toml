@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-storage"
+description = "Enables iCloud JSON storage commands."
+commands.allow = ["ensure_storage_ready_command", "read_json_command", "write_json_command"]

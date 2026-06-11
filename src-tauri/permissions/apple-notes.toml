@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-apple-notes"
+description = "Enables Apple Notes commands."
+commands.allow = ["create_note", "get_note_history"]

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-web-search"
+description = "Enables the web_search command."
+commands.allow = ["web_search"]

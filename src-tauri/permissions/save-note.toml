@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-save-note"
+description = "Enables the save_note command."
+commands.allow = ["save_note"]

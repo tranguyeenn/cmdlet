@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-tasks"
+description = "Enables create_task and load_tasks_command commands."
+commands.allow = ["create_task", "load_tasks_command"]

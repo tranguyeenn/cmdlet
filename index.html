@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>cmdlet</title>
+  </head>
+  <body>
+    <div id="palette" class="palette">
+      <div class="input-row">
+        <span class="prompt">&gt;</span>
+        <input
+          id="command-input"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          aria-label="Command input"
+        />
+      </div>
+      <div id="history" class="history" aria-live="polite"></div>
+      <div id="suggestions" class="suggestions" hidden></div>
+      <div class="hints" aria-hidden="true">
+        <span><kbd>↑</kbd><kbd>↓</kbd> history</span>
+        <span><kbd>Tab</kbd> autocomplete</span>
+        <span><kbd>Enter</kbd> execute</span>
+        <span><kbd>Esc</kbd> close</span>
+        <span><kbd>⌘</kbd><kbd>Q</kbd> quit</span>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

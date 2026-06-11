@@ -1,0 +1,11 @@
+[[permission]]
+identifier = "allow-create-event"
+description = "Enables Apple Calendar event commands."
+commands.allow = [
+  "get_calendars",
+  "create_event",
+  "delete_event",
+  "create_cmdlet_calendar",
+  "check_cmdlet_calendar_exists",
+  "get_event_history",
+]

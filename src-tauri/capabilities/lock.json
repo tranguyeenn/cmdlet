@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "lock",
+  "description": "Capability for the keyboard-lock popup window: lets its unlock button call into the backend.",
+  "windows": ["lock"],
+  "permissions": [
+    "core:default",
+    "allow-keyboard-lock"
+  ]
+}

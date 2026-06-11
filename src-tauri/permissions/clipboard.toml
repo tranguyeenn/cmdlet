@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-clipboard"
+description = "Enables clipboard read/write commands."
+commands.allow = ["read_clipboard", "write_clipboard"]

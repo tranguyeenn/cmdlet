@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-reminders"
+description = "Enables Apple Reminders commands."
+commands.allow = ["get_reminder_lists", "list_reminders", "create_reminder", "update_reminder", "delete_reminder", "get_reminder_history"]

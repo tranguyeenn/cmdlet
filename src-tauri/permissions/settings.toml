@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-settings"
+description = "Enables load_settings and update_setting commands."
+commands.allow = ["load_settings", "update_setting", "save_settings"]

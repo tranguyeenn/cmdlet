@@ -1,0 +1,140 @@
+/**
+ * Terminal-inspired styles for the command palette overlay.
+ */
+:root {
+  color-scheme: dark;
+  font-family: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.palette {
+  width: 100%;
+  background: rgba(18, 18, 20, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 22px 28px;
+  color: #e8e8ea;
+  backdrop-filter: blur(12px);
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 32px;
+}
+
+.prompt {
+  color: #7dd3fc;
+  font-weight: 600;
+  font-size: 1.1em;
+  user-select: none;
+}
+
+#command-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #f4f4f5;
+  font: inherit;
+  caret-color: #7dd3fc;
+}
+
+#command-input::placeholder {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.history {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.history-entry {
+  line-height: 1.5;
+}
+
+.history-input {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.history-output {
+  color: #a1a1aa;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.history-entry:last-child .history-output {
+  color: #d4d4d8;
+}
+
+.history:empty {
+  display: none;
+}
+
+.suggestions {
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.suggestions[hidden] {
+  display: none;
+}
+
+.hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.75em;
+}
+
+.hints kbd {
+  display: inline-block;
+  margin-right: 2px;
+  padding: 1px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.55);
+  font: inherit;
+  font-size: 0.95em;
+}
+
+.history::-webkit-scrollbar {
+  width: 8px;
+}
+
+.history::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+}

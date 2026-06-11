@@ -1,0 +1,11 @@
+[[permission]]
+identifier = "allow-books"
+description = "Enables book tracking commands."
+commands.allow = [
+  "add_book",
+  "list_books",
+  "delete_book",
+  "sync_book_from_excel",
+  "set_current_book",
+  "update_book_progress",
+]

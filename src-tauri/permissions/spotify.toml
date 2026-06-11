@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-spotify"
+description = "Enables Spotify search and playback commands."
+commands.allow = ["spotify_control", "spotify_search", "spotify_play_track"]

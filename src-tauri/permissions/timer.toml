@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-timer"
+description = "Enables the start_timer command."
+commands.allow = ["start_timer"]

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-planner"
+description = "Enables planner dashboard and export commands."
+commands.allow = ["planner_dashboard", "planner_export"]

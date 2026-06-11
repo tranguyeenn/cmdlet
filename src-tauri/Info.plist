@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSCalendarsUsageDescription</key>
+  <string>Cmdlet creates events in Apple Calendar on your behalf.</string>
+  <key>NSRemindersUsageDescription</key>
+  <string>Cmdlet creates reminders in Apple Reminders on your behalf.</string>
+</dict>
+</plist>

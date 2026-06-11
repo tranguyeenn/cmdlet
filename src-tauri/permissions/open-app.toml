@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-open-app"
+description = "Enables the open_app command."
+commands.allow = ["open_app"]

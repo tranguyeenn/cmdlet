@@ -1,0 +1,17 @@
+[[permission]]
+identifier = "allow-academic"
+description = "Enables academic planner commands."
+commands.allow = [
+  "add_class",
+  "list_classes",
+  "delete_class",
+  "rename_class",
+  "add_assignment",
+  "list_assignments",
+  "delete_assignment",
+  "rename_assignment",
+  "add_exam",
+  "list_exams",
+  "delete_exam",
+  "rename_exam",
+]

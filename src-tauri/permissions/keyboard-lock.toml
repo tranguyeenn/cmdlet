@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-keyboard-lock"
+description = "Enables the lock_keyboard and unlock_keyboard commands."
+commands.allow = ["lock_keyboard", "unlock_keyboard"]

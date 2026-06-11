@@ -1,0 +1,14 @@
+[[permission]]
+identifier = "allow-second-brain"
+description = "Enables second brain Excel workbook commands."
+commands.allow = [
+  "second_brain_workbook_path",
+  "second_brain_exists",
+  "read_second_brain_bytes",
+  "write_second_brain_bytes",
+  "read_second_brain_base64",
+  "write_second_brain_base64",
+  "replace_second_brain_sheet_rows",
+  "seed_second_brain_from_template",
+  "open_second_brain_workbook",
+]

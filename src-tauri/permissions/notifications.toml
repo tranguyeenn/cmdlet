@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-notifications"
+description = "Enables macOS native notification commands."
+commands.allow = ["notify"]

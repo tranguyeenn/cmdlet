@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-files"
+description = "Enables search_files and open_file commands."
+commands.allow = ["search_files", "open_file"]
