@@ -5,6 +5,7 @@ import { SHEET_FORMS } from "../services/excelRowSchemas";
 export type EditFinish = (
   lookupKey: string,
   values: Record<string, string>,
+  previousValues?: Record<string, string>,
 ) => Promise<CommandResult>;
 
 /**
@@ -43,6 +44,7 @@ export function buildEditPromptResult(
   fieldIndex: number,
   values: Record<string, string>,
   finish: EditFinish,
+  previousValues?: Record<string, string>,
 ): CommandResult {
   const schema = SHEET_FORMS[formId];
   const field = schema.fields[fieldIndex];
@@ -70,10 +72,17 @@ export function buildEditPromptResult(
 
     const nextIndex = fieldIndex + 1;
     if (nextIndex >= schema.fields.length) {
-      return finish(lookupKey, nextValues);
+      return finish(lookupKey, nextValues, previousValues);
     }
 
-    return buildEditPromptResult(formId, lookupKey, nextIndex, nextValues, finish);
+    return buildEditPromptResult(
+      formId,
+      lookupKey,
+      nextIndex,
+      nextValues,
+      finish,
+      previousValues,
+    );
   };
 
   return {

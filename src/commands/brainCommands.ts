@@ -17,7 +17,6 @@ import {
 import { completeSheetRowPrompt } from "../utils/excelRowPrompt";
 import { completeSheetRowEditPrompt } from "../utils/sheetEditPrompt";
 import { getWorkbookPath } from "../services/excel";
-import { syncDueRemindersQuiet } from "../services/dueReminders";
 import { syncProjectDelete, withExcelWarning } from "../services/excelSync";
 import { parseSubcommand } from "../utils/parseArgs";
 import { listActiveSheetFormRows } from "../utils/activeSheetRows";
@@ -119,7 +118,6 @@ export const projectCommand: Command = {
         if (excelError) {
           return withExcelWarning(`Deleted project: ${rest}`, excelError);
         }
-        await syncDueRemindersQuiet();
         return `Deleted project: ${rest} (removed from Excel)`;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

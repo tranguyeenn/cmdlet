@@ -1,7 +1,8 @@
 /**
  * Parses raw user input and routes it to the matching command handler.
  */
-import { resolveCommand } from "./commands";
+import { resolveExecutableCommand } from "./commands";
+import { timeAsync } from "./lib/perf";
 import type { CommandResult, ParsedInput } from "./types";
 
 type FollowUpHandler = (input: string) => Promise<CommandResult>;
@@ -60,24 +61,28 @@ export function parseInput(input: string): ParsedInput {
 
 /** Execute a palette command and return its output string. */
 export async function executeCommand(input: string): Promise<string> {
-  const trimmed = input.trim();
-  if (!trimmed && !activeFollowUp) {
-    return "";
-  }
+  return timeAsync("command.execute", async () => {
+    const trimmed = input.trim();
+    if (!trimmed && !activeFollowUp) {
+      return "";
+    }
 
-  if (activeFollowUp) {
-    const handler = activeFollowUp;
-    const next = await handler(trimmed);
-    return runResult(next);
-  }
+    if (activeFollowUp) {
+      const handler = activeFollowUp;
+      const next = await timeAsync("command.followUp", () => handler(trimmed));
+      return runResult(next);
+    }
 
-  const { commandName, args } = parseInput(trimmed);
-  const command = resolveCommand(commandName);
+    const { commandName, args } = parseInput(trimmed);
+    const command = await resolveExecutableCommand(commandName);
 
-  if (!command) {
-    return `Unknown command: ${commandName}. Type "help" or "help <command>" for examples.`;
-  }
+    if (!command) {
+      return `Unknown command: ${commandName}. Type "help" or "help <command>" for examples.`;
+    }
 
-  const result = await command.execute(args);
-  return runResult(result);
+    const result = await timeAsync(`command.run.${command.name}`, async () =>
+      command.execute(args),
+    );
+    return runResult(result);
+  });
 }

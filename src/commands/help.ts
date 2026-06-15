@@ -2,7 +2,7 @@
  * Lists all registered palette commands and shows per-command usage.
  */
 import type { Command } from "../types";
-import { catalogCommands, spotifyCommand, webCommand } from "./catalog";
+import { allCommandSpecs, resolveCommandSpec, type CommandSpec } from "./specs";
 
 const HELP_OVERVIEW = `open       Launch a macOS application (e.g. open Spotify)
 calc       Evaluate a math expression (e.g. calc 5*8)
@@ -30,22 +30,10 @@ settings   View or change app settings
 
 Type "help <command>" for examples.`;
 
-const helpByName = new Map(catalogCommands.map((command) => [command.name, command]));
-
-const commandAliases = new Map<string, Command>([
-  ["sp", spotifyCommand],
-  ["search", webCommand],
-]);
-
-function resolveCommand(name: string): Command | undefined {
-  const lower = name.toLowerCase();
-  return commandAliases.get(lower) ?? helpByName.get(lower);
-}
-
-function formatCommandHelp(command: Command): string {
+function formatCommandHelp(command: CommandSpec): string {
   const lines = [command.name, command.description, "", "Examples:"];
 
-  if (command.examples?.length) {
+  if (command.examples.length) {
     for (const line of command.examples) {
       lines.push(`  ${line}`);
     }
@@ -63,8 +51,9 @@ export const helpCommand: Command = {
   examples: ["help", "help book", "help progress", "help dashboard"],
   complete(prefix: string): string[] {
     const lower = prefix.toLowerCase();
-    const names = [...catalogCommands.map((command) => command.name), "help"];
-    return names.filter((name) => name.startsWith(lower));
+    return allCommandSpecs()
+      .map((command) => command.name)
+      .filter((name) => name.startsWith(lower));
   },
   execute(args: string): string {
     const target = args.trim().toLowerCase();
@@ -73,11 +62,7 @@ export const helpCommand: Command = {
       return HELP_OVERVIEW;
     }
 
-    if (target === "help") {
-      return formatCommandHelp(helpCommand);
-    }
-
-    const command = resolveCommand(target);
+    const command = resolveCommandSpec(target);
     if (!command) {
       return `Unknown command: ${target}. Type "help" for available commands.`;
     }

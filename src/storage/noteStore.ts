@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { timedInvoke } from "../lib/timedInvoke";
 
 export interface CreateNotePayload {
   title: string;
@@ -21,9 +21,9 @@ export interface NoteHistoryEntry {
 export async function createAppleNote(
   payload: CreateNotePayload,
 ): Promise<CreateNoteResponse> {
-  return invoke<CreateNoteResponse>("create_note", { payload });
+  return timedInvoke<CreateNoteResponse>("create_note", { payload }, "notes.create");
 }
 
 export async function getNoteHistory(): Promise<NoteHistoryEntry[]> {
-  return invoke<NoteHistoryEntry[]>("get_note_history");
+  return timedInvoke<NoteHistoryEntry[]>("get_note_history", undefined, "storage.read.noteHistory");
 }

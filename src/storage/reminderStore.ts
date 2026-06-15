@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { timedInvoke } from "../lib/timedInvoke";
 
 export type ReminderPriority = "none" | "low" | "medium" | "high";
 export type RepeatRule = "none" | "daily" | "weekly" | "monthly";
@@ -41,17 +41,17 @@ export interface ReminderInfo {
 export const DEFAULT_REMINDER_LIST = "Reminders";
 
 export async function getReminderLists(): Promise<ReminderListInfo[]> {
-  return invoke<ReminderListInfo[]>("get_reminder_lists");
+  return timedInvoke<ReminderListInfo[]>("get_reminder_lists", undefined, "reminders.lists");
 }
 
 export async function createReminder(
   payload: CreateReminderPayload,
 ): Promise<CreateReminderResponse> {
-  return invoke<CreateReminderResponse>("create_reminder", { payload });
+  return timedInvoke<CreateReminderResponse>("create_reminder", { payload }, "reminders.create");
 }
 
 export async function getReminderHistory(): Promise<ReminderHistoryEntry[]> {
-  return invoke<ReminderHistoryEntry[]>("get_reminder_history");
+  return timedInvoke<ReminderHistoryEntry[]>("get_reminder_history", undefined, "storage.read.reminderHistory");
 }
 
 export interface ListRemindersPayload {
@@ -62,7 +62,7 @@ export interface ListRemindersPayload {
 export async function listReminders(
   payload: ListRemindersPayload,
 ): Promise<ReminderInfo[]> {
-  return invoke<ReminderInfo[]>("list_reminders", { payload });
+  return timedInvoke<ReminderInfo[]>("list_reminders", { payload }, "reminders.list");
 }
 
 export interface DeleteReminderPayload {
@@ -77,7 +77,7 @@ export interface DeleteReminderResponse {
 export async function deleteReminder(
   payload: DeleteReminderPayload,
 ): Promise<DeleteReminderResponse> {
-  return invoke<DeleteReminderResponse>("delete_reminder", { payload });
+  return timedInvoke<DeleteReminderResponse>("delete_reminder", { payload }, "reminders.delete");
 }
 
 export interface UpdateReminderPayload {
@@ -96,5 +96,5 @@ export interface UpdateReminderResponse {
 export async function updateReminder(
   payload: UpdateReminderPayload,
 ): Promise<UpdateReminderResponse> {
-  return invoke<UpdateReminderResponse>("update_reminder", { payload });
+  return timedInvoke<UpdateReminderResponse>("update_reminder", { payload }, "reminders.update");
 }

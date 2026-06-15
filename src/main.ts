@@ -3,21 +3,14 @@
  */
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
-import { ensureStorageReady } from "./storage/service";
-import { loadSettings } from "./storage/settingsStore";
-import { getReminderLists } from "./storage/reminderStore";
-import {
-  checkDueNotifications,
-  startNativeNotificationScheduler,
-} from "./services/nativeNotifications";
-import { syncDueRemindersQuiet } from "./services/dueReminders";
 import {
   applyCompletion,
   currentToken,
   getCompletions,
   longestCommonPrefix,
 } from "./autocomplete";
+import { markPerf } from "./lib/perf";
+import { timedInvoke } from "./lib/timedInvoke";
 import { clearFollowUp, executeCommand, getFollowUpHint, isFollowUpActive, parseInput } from "./executor";
 import type { HistoryEntry } from "./types";
 import "./styles.css";
@@ -36,6 +29,7 @@ const inputHistory: string[] = [];
 let inputHistoryIndex = -1;
 let draftInput = "";
 let ignoreBlur = false;
+let completionTimer: number | null = null;
 
 function renderHistory(scrollToLatest = false): void {
   historyEl.innerHTML = history
@@ -74,6 +68,22 @@ function renderSuggestions(items: string[]): void {
 function clearSuggestions(): void {
   suggestionsEl.textContent = "";
   suggestionsEl.hidden = true;
+}
+
+function scheduleCompletions(): void {
+  if (completionTimer !== null) {
+    window.clearTimeout(completionTimer);
+  }
+
+  const value = input.value;
+  completionTimer = window.setTimeout(() => {
+    completionTimer = null;
+    if (input.value !== value || !value.trim()) {
+      return;
+    }
+
+    renderSuggestions(getCompletions(value).slice(0, 12));
+  }, 200);
 }
 
 function escapeHtml(text: string): string {
@@ -244,7 +254,7 @@ input.addEventListener("keydown", (event) => {
     event.preventDefault();
     ignoreBlur = true;
     void getCurrentWindow().hide();
-    void invoke("quit_app");
+    void timedInvoke("quit_app", undefined, "app.quit");
     return;
   }
 
@@ -267,15 +277,12 @@ input.addEventListener("keydown", (event) => {
 });
 
 input.addEventListener("input", () => {
-  if (suggestionsEl.hidden) {
-    return;
-  }
   clearSuggestions();
+  scheduleCompletions();
 });
 
 void listen("palette-shown", () => {
   ignoreBlur = true;
-  checkDueNotifications();
   void syncWindowSize(true).then(() => {
     focusInput();
     window.setTimeout(() => {
@@ -302,33 +309,8 @@ void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
   void hidePalette();
 });
 
-async function warmUpRemindersPermission(): Promise<void> {
-  const settings = await loadSettings();
-  if (!settings.remindersEnabled) {
-    return;
-  }
-
-  try {
-    await getReminderLists();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Cmdlet Reminders unavailable: ${message}`);
-  }
-}
-
-async function bootstrapApp(): Promise<void> {
-  try {
-    await ensureStorageReady();
-    await warmUpRemindersPermission();
-    await syncDueRemindersQuiet();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Cmdlet startup unavailable: ${message}`);
-  }
-}
-
 window.addEventListener("DOMContentLoaded", () => {
-  void bootstrapApp();
-  startNativeNotificationScheduler();
+  const end = markPerf("startup.firstInput");
   void syncWindowSize(true).then(() => focusInput());
+  requestAnimationFrame(() => end());
 });

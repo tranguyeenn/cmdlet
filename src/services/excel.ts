@@ -1,5 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import ExcelJS from "exceljs";
+import { timeAsync } from "../lib/perf";
+import { timedInvoke } from "../lib/timedInvoke";
 
 export const WORKBOOK_FILENAME = "cmdlet_second_brain.xlsm";
 
@@ -21,11 +22,11 @@ function base64ToBytes(base64: string): Uint8Array {
 }
 
 export async function getWorkbookPath(): Promise<string> {
-  return invoke<string>("second_brain_workbook_path");
+  return timedInvoke<string>("second_brain_workbook_path", undefined, "excel.path");
 }
 
 export async function workbookExists(): Promise<boolean> {
-  return invoke<boolean>("second_brain_exists");
+  return timedInvoke<boolean>("second_brain_exists", undefined, "excel.exists");
 }
 
 /**
@@ -34,30 +35,38 @@ export async function workbookExists(): Promise<boolean> {
  * exists or no template ships with the build (caller falls back to code-gen).
  */
 export async function seedSecondBrainFromTemplate(): Promise<boolean> {
-  return invoke<boolean>("seed_second_brain_from_template");
+  return timedInvoke<boolean>("seed_second_brain_from_template", undefined, "excel.seedTemplate");
 }
 
 export async function readWorkbook(): Promise<ExcelJS.Workbook> {
-  const base64 = await invoke<string>("read_second_brain_base64");
-  const bytes = base64ToBytes(base64);
-  const workbook = new ExcelJS.Workbook();
+  return timeAsync("excel.readWorkbook", async () => {
+    const base64 = await timedInvoke<string>("read_second_brain_base64", undefined, "excel.readBase64");
+    const bytes = base64ToBytes(base64);
+    const workbook = new ExcelJS.Workbook();
 
-  try {
-    await workbook.xlsx.load(bytes.buffer);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Could not read the Excel workbook (${message}). Close Excel, run brain init, and try again.`,
-    );
-  }
+    try {
+      await timeAsync("excel.parseWorkbook", async () => {
+        await workbook.xlsx.load(bytes.buffer);
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Could not read the Excel workbook (${message}). Close Excel, run brain init, and try again.`,
+      );
+    }
 
-  return workbook;
+    return workbook;
+  });
 }
 
 export async function writeWorkbook(workbook: ExcelJS.Workbook): Promise<void> {
-  const buffer = await workbook.xlsx.writeBuffer();
-  const base64 = bytesToBase64(new Uint8Array(buffer as ArrayBuffer));
-  await invoke("write_second_brain_base64", { data: base64 });
+  await timeAsync("excel.writeWorkbook", async () => {
+    const buffer = await timeAsync("excel.serializeWorkbook", async () =>
+      workbook.xlsx.writeBuffer(),
+    );
+    const base64 = bytesToBase64(new Uint8Array(buffer as ArrayBuffer));
+    await timedInvoke("write_second_brain_base64", { data: base64 }, "excel.writeBase64");
+  });
 }
 
 export type SheetCellPayload =
@@ -73,11 +82,11 @@ export interface SheetRowsPayload {
 export async function replaceWorkbookSheetRows(
   sheets: SheetRowsPayload[],
 ): Promise<void> {
-  await invoke("replace_second_brain_sheet_rows", { sheets });
+  await timedInvoke("replace_second_brain_sheet_rows", { sheets }, "excel.replaceSheetRows");
 }
 
 export async function openWorkbookFile(): Promise<string> {
-  return invoke<string>("open_second_brain_workbook");
+  return timedInvoke<string>("open_second_brain_workbook", undefined, "excel.openWorkbook");
 }
 
 const HEADER_FILL: ExcelJS.Fill = {

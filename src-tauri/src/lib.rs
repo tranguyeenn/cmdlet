@@ -394,26 +394,6 @@ pub fn run() {
             planner::planner_export,
         ])
         .setup(|app| {
-            if let Err(error) = storage::ensure_storage_ready() {
-                eprintln!("Cmdlet storage init failed: {error}");
-            } else if let Err(error) = storage::migrate_from_legacy(app.handle()) {
-                eprintln!("Cmdlet storage migration failed: {error}");
-            }
-
-            let app_handle = app.handle().clone();
-            thread::spawn(move || {
-                thread::sleep(Duration::from_millis(800));
-                match calendar::check_cmdlet_calendar_exists() {
-                    Ok(false) => {
-                        let _ = app_handle.emit("cmdlet-calendar-missing", ());
-                    }
-                    Err(error) => {
-                        eprintln!("Cmdlet calendar check failed: {error}");
-                    }
-                    _ => {}
-                }
-            });
-
             #[cfg(target_os = "macos")]
             {
                 let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);

@@ -2,31 +2,55 @@
  * Tab completion for palette commands and subcommands.
  */
 import { allCommands, resolveCommand } from "./commands";
+import { timeSync } from "./lib/perf";
+
+const completionCache = new Map<string, string[]>();
+
+function cachedCompletion(key: string, compute: () => string[]): string[] {
+  const cached = completionCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const items = compute();
+  completionCache.set(key, items);
+  return items;
+}
 
 /** Return matching completions for the current input. */
 export function getCompletions(input: string): string[] {
-  const trimmed = input.trimStart();
-  if (!trimmed) {
-    return allCommands().map((command) => command.name).sort();
-  }
+  return timeSync("autocomplete.filter", () => {
+    const trimmed = input.trimStart();
+    const cacheKey = trimmed.toLowerCase();
+    if (!trimmed) {
+      return cachedCompletion(cacheKey, () =>
+        allCommands().map((command) => command.name).sort(),
+      );
+    }
 
-  const spaceIndex = trimmed.indexOf(" ");
-  if (spaceIndex === -1) {
-    const prefix = trimmed.toLowerCase();
-    return allCommands()
-      .map((command) => command.name)
-      .filter((name) => name.startsWith(prefix))
-      .sort();
-  }
+    const spaceIndex = trimmed.indexOf(" ");
+    if (spaceIndex === -1) {
+      const prefix = trimmed.toLowerCase();
+      return cachedCompletion(cacheKey, () =>
+        allCommands()
+          .map((command) => command.name)
+          .filter((name) => name.startsWith(prefix))
+          .sort(),
+      );
+    }
 
-  const commandName = trimmed.slice(0, spaceIndex).toLowerCase();
-  const argsPrefix = trimmed.slice(spaceIndex + 1);
-  const command = resolveCommand(commandName);
-  if (!command?.complete) {
-    return [];
-  }
+    const commandName = trimmed.slice(0, spaceIndex).toLowerCase();
+    const argsPrefix = trimmed.slice(spaceIndex + 1);
+    const command = resolveCommand(commandName);
+    if (!command?.completions) {
+      return [];
+    }
 
-  return command.complete(argsPrefix);
+    const lower = argsPrefix.toLowerCase();
+    return cachedCompletion(cacheKey, () =>
+      command.completions!.filter((item) => item.toLowerCase().startsWith(lower)),
+    );
+  });
 }
 
 /** Longest shared prefix across completion candidates. */

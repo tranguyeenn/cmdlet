@@ -14,6 +14,9 @@ const CMDLET_PREFIX = "[Cmdlet]";
 
 type ReminderSyncCounts = { created: number; updated: number; deleted: number };
 
+let queuedDueReminderSync: Promise<void> | null = null;
+let pendingDueReminderSync = false;
+
 interface DesiredReminder {
   title: string;
   listName: string;
@@ -452,6 +455,30 @@ export async function syncDueRemindersQuiet(): Promise<void> {
   } catch {
     // Background sync should never block commands.
   }
+}
+
+export function queueDueRemindersSync(delayMs = 0): void {
+  pendingDueReminderSync = true;
+
+  if (queuedDueReminderSync) {
+    return;
+  }
+
+  queuedDueReminderSync = new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  })
+    .then(async () => {
+      while (pendingDueReminderSync) {
+        pendingDueReminderSync = false;
+        await syncDueRemindersQuiet();
+      }
+    })
+    .finally(() => {
+      queuedDueReminderSync = null;
+      if (pendingDueReminderSync) {
+        queueDueRemindersSync();
+      }
+    });
 }
 
 export async function syncDueReminders(): Promise<string> {

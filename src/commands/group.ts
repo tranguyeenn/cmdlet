@@ -1,4 +1,8 @@
-import type { Command, CommandCategory } from "../types";
+import type { CommandCategory } from "../types";
+
+interface CategorizedCommand {
+  category: CommandCategory;
+}
 
 const CATEGORY_ORDER: CommandCategory[] = [
   "System",
@@ -13,8 +17,8 @@ const CATEGORY_ORDER: CommandCategory[] = [
 
 /** Group commands by category in display order. */
 export function groupCommandsByCategory(
-  commands: Command[],
-): { label: CommandCategory; commands: Command[] }[] {
+  commands: CategorizedCommand[],
+): { label: CommandCategory; commands: CategorizedCommand[] }[] {
   return CATEGORY_ORDER.map((label) => ({
     label,
     commands: commands.filter((command) => command.category === label),

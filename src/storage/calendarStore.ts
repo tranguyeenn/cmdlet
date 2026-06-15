@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { timedInvoke } from "../lib/timedInvoke";
 import type {
   CalendarInfo,
   CreateEventPayload,
@@ -7,25 +7,25 @@ import type {
 } from "../types/event";
 
 export async function getCalendars(): Promise<CalendarInfo[]> {
-  return invoke<CalendarInfo[]>("get_calendars");
+  return timedInvoke<CalendarInfo[]>("get_calendars", undefined, "calendar.list");
 }
 
 export async function checkCmdletCalendarExists(): Promise<boolean> {
-  return invoke<boolean>("check_cmdlet_calendar_exists");
+  return timedInvoke<boolean>("check_cmdlet_calendar_exists", undefined, "calendar.checkCmdlet");
 }
 
 export async function createCmdletCalendar(): Promise<string> {
-  return invoke<string>("create_cmdlet_calendar");
+  return timedInvoke<string>("create_cmdlet_calendar", undefined, "calendar.createCmdlet");
 }
 
 export async function createEvent(
   payload: CreateEventPayload,
 ): Promise<CreateEventResponse> {
-  return invoke<CreateEventResponse>("create_event", { payload });
+  return timedInvoke<CreateEventResponse>("create_event", { payload }, "calendar.createEvent");
 }
 
 export async function getEventHistory(): Promise<EventHistoryEntry[]> {
-  return invoke<EventHistoryEntry[]>("get_event_history");
+  return timedInvoke<EventHistoryEntry[]>("get_event_history", undefined, "storage.read.eventHistory");
 }
 
 export interface DeleteEventPayload {
@@ -40,5 +40,5 @@ export interface DeleteEventResponse {
 export async function deleteEvent(
   payload: DeleteEventPayload,
 ): Promise<DeleteEventResponse> {
-  return invoke<DeleteEventResponse>("delete_event", { payload });
+  return timedInvoke<DeleteEventResponse>("delete_event", { payload }, "calendar.deleteEvent");
 }

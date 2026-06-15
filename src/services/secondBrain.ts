@@ -29,6 +29,7 @@ import {
   type SheetRowsPayload,
 } from "./excel";
 import { toExcelSerialUTC } from "../utils/dateSerializer";
+import { timeAsync } from "../lib/perf";
 
 export const SHEET = {
   DASHBOARD: "Dashboard",
@@ -66,6 +67,80 @@ const BOOK_STATUS = ["To Read", "Reading", "Finished", "DNF"] as const;
 const MOOD = ["Low", "Okay", "Good", "Great"] as const;
 const ENERGY = ["Low", "Medium", "High"] as const;
 const NA_VALUE = "n/a";
+
+type SheetFormRows = Array<{ key: string; values: Record<string, string> }>;
+
+const sheetRowsCache = new Map<SheetFormId, SheetFormRows>();
+
+function cloneSheetRows(rows: SheetFormRows): SheetFormRows {
+  return rows.map((row) => ({ key: row.key, values: { ...row.values } }));
+}
+
+function rowKeyForValues(formId: SheetFormId, values: Record<string, string>): string {
+  if (formId === "assignments") {
+    return values.assignment ?? "";
+  }
+  if (formId === "exams") {
+    return values.examName ?? "";
+  }
+  if (formId === "classes") {
+    return values.course ?? "";
+  }
+  if (formId === "projects") {
+    return values.project ?? "";
+  }
+  if (formId === "books") {
+    return values.title ?? "";
+  }
+  if (formId === "life") {
+    return values.date ?? "";
+  }
+  return values.title ?? "";
+}
+
+export function invalidateSheetRows(formId?: SheetFormId): void {
+  if (formId) {
+    sheetRowsCache.delete(formId);
+    return;
+  }
+  sheetRowsCache.clear();
+}
+
+export function updateCachedSheetRow(
+  formId: SheetFormId,
+  lookupKey: string,
+  values: Record<string, string>,
+): void {
+  const rows = sheetRowsCache.get(formId);
+  if (!rows) {
+    return;
+  }
+
+  const nextKey = rowKeyForValues(formId, values).trim() || lookupKey;
+  const index = rows.findIndex(
+    (row) => row.key.trim().toLowerCase() === lookupKey.trim().toLowerCase(),
+  );
+  if (index === -1) {
+    rows.push({ key: nextKey, values: { ...values } });
+    return;
+  }
+
+  rows[index] = { key: nextKey, values: { ...values } };
+}
+
+function removeCachedSheetRow(formId: SheetFormId, lookupKey: string): void {
+  const rows = sheetRowsCache.get(formId);
+  if (!rows) {
+    return;
+  }
+
+  const index = rows.findIndex(
+    (row) => row.key.trim().toLowerCase() === lookupKey.trim().toLowerCase(),
+  );
+  if (index !== -1) {
+    rows.splice(index, 1);
+  }
+}
 
 function withNaOption<T extends string>(options: readonly T[]): string[] {
   return [...options, NA_VALUE];
@@ -507,8 +582,9 @@ function configureWorkbookStructure(workbook: ExcelJS.Workbook): void {
 }
 
 let workbookWriteChain: Promise<void> = Promise.resolve();
-
-type WorkbookVerify = (workbook: ExcelJS.Workbook) => boolean;
+let workbookCache: ExcelJS.Workbook | null = null;
+let workbookReady = false;
+let workbookExistsCache: boolean | null = null;
 
 function assertTemplateForm(formId: SheetFormId): void {
   if (formId === "notes") {
@@ -588,42 +664,77 @@ function extractTemplateSheetRows(workbook: ExcelJS.Workbook): SheetRowsPayload[
   );
 }
 
-async function performWorkbookWrite(
-  mutate: (workbook: ExcelJS.Workbook) => void | Promise<void>,
-  verify?: WorkbookVerify,
-): Promise<void> {
-  let exists = await workbookExists();
+function extractDirtySheetRows(
+  workbook: ExcelJS.Workbook,
+  dirtySheets: readonly string[],
+): SheetRowsPayload[] {
+  const wanted = new Set(dirtySheets);
+  return TEMPLATE_DATA_SHEETS
+    .filter(({ name }) => wanted.has(name))
+    .map(({ name, columns }) => extractSheetRows(workbook, name, columns));
+}
+
+async function getCachedWorkbook(): Promise<ExcelJS.Workbook> {
+  if (workbookCache && workbookReady) {
+    return workbookCache;
+  }
+
+  let exists = workbookExistsCache ?? await workbookExists();
+  workbookExistsCache = exists;
+
   // First write on a fresh install: prefer the bundled template over code
   // generation so every entry point (form add, planner sync, quick log) lands
   // on the same starter layout.
   if (!exists && (await seedSecondBrainFromTemplate())) {
     exists = true;
+    workbookExistsCache = true;
   }
+
   const workbook = exists ? await readWorkbook() : new ExcelJS.Workbook();
   if (exists) {
     ensureWorkbookSheets(workbook);
   } else {
     configureWorkbookStructure(workbook);
+    await writeWorkbook(workbook);
+    workbookExistsCache = true;
   }
-  await mutate(workbook);
-  await replaceWorkbookSheetRows(extractTemplateSheetRows(workbook));
 
-  if (verify) {
-    const checked = await readWorkbook();
-    if (!verify(checked)) {
-      throw new Error(
-        "Excel save could not be verified. Close Excel, run brain sync, and try again.",
-      );
-    }
+  workbookCache = workbook;
+  workbookReady = true;
+  return workbook;
+}
+
+function invalidateWorkbookCache(): void {
+  workbookCache = null;
+  workbookReady = false;
+  workbookExistsCache = null;
+  invalidateSheetRows();
+}
+
+async function performWorkbookWrite(
+  mutate: (workbook: ExcelJS.Workbook) => void | Promise<void>,
+  dirtySheets?: readonly string[],
+): Promise<void> {
+  const workbook = await getCachedWorkbook();
+  try {
+    await mutate(workbook);
+    await replaceWorkbookSheetRows(
+      dirtySheets?.length
+        ? extractDirtySheetRows(workbook, dirtySheets)
+        : extractTemplateSheetRows(workbook),
+    );
+  } catch (error) {
+    invalidateWorkbookCache();
+    throw error;
   }
 }
 
 /** Serialize read-modify-write cycles so concurrent saves cannot overwrite each other. */
 async function withWorkbook(
   mutate: (workbook: ExcelJS.Workbook) => void | Promise<void>,
-  verify?: WorkbookVerify,
+  dirtySheets?: readonly string[],
 ): Promise<void> {
-  const task = workbookWriteChain.then(() => performWorkbookWrite(mutate, verify));
+  const task = workbookWriteChain.then(() => performWorkbookWrite(mutate, dirtySheets));
   workbookWriteChain = task.then(
     () => undefined,
     () => undefined,
@@ -632,13 +743,16 @@ async function withWorkbook(
 }
 
 export async function ensureWorkbookReady(): Promise<void> {
-  if (await workbookExists()) {
+  const exists = workbookExistsCache ?? await workbookExists();
+  if (exists) {
+    workbookExistsCache = true;
     return;
   }
   // Prefer the bundled starter workbook (preserves layout, the Assignments
   // View spill sheet, and dashboard/stats); fall back to code generation when
   // no template ships with the build (e.g. older installs).
   if (await seedSecondBrainFromTemplate()) {
+    workbookExistsCache = true;
     return;
   }
   await initSecondBrain();
@@ -679,13 +793,14 @@ export async function logTaskToExcel(payload: TaskExcelPayload): Promise<void> {
     sheet.getRow(row).getCell(4).value = payload.dueTime ?? "";
     sheet.getRow(row).getCell(5).value = "Not Started";
     applyRowGroupColor(sheet, row, HEADERS.tasks.length, payload.category);
-  });
+  }, [SHEET.TASKS]);
 }
 
 export async function removeTaskFromExcel(title: string): Promise<void> {
   await withWorkbook((workbook) => {
     removeRowByColumnValue(workbook.getWorksheet(SHEET.TASKS)!, 1, title);
-  });
+  }, [SHEET.TASKS]);
+  removeCachedSheetRow("tasks", title);
 }
 
 export async function logEventToExcel(payload: EventExcelPayload): Promise<void> {
@@ -699,13 +814,14 @@ export async function logEventToExcel(payload: EventExcelPayload): Promise<void>
     setDateCell(sheet.getRow(row).getCell(2), dateOnly(start));
     sheet.getRow(row).getCell(3).value = formatClock(start);
     sheet.getRow(row).getCell(4).value = formatClock(end);
-  });
+  }, [SHEET.EVENTS]);
 }
 
 export async function removeEventFromExcel(title: string): Promise<void> {
   await withWorkbook((workbook) => {
     removeRowByColumnValue(workbook.getWorksheet(SHEET.EVENTS)!, 1, title);
-  });
+  }, [SHEET.EVENTS]);
+  removeCachedSheetRow("events", title);
 }
 
 export async function logNoteToExcel(payload: NoteExcelPayload): Promise<void> {
@@ -717,25 +833,28 @@ export async function logClassToExcel(name: string): Promise<void> {
     const sheet = workbook.getWorksheet(SHEET.CLASSES)!;
     const row = nextDataRow(sheet);
     sheet.getRow(row).getCell(1).value = name;
-  });
+  }, [SHEET.CLASSES]);
 }
 
 export async function removeClassFromExcel(name: string): Promise<void> {
   await withWorkbook((workbook) => {
     removeRowByColumnValue(workbook.getWorksheet(SHEET.CLASSES)!, 1, name);
-  });
+  }, [SHEET.CLASSES]);
+  removeCachedSheetRow("classes", name);
 }
 
 export async function removeAssignmentFromExcel(title: string): Promise<void> {
   await withWorkbook((workbook) => {
     removeRowByColumnValue(workbook.getWorksheet(SHEET.ASSIGNMENTS)!, 2, title);
-  });
+  }, [SHEET.ASSIGNMENTS]);
+  removeCachedSheetRow("assignments", title);
 }
 
 export async function removeExamFromExcel(title: string): Promise<void> {
   await withWorkbook((workbook) => {
     removeRowByColumnValue(workbook.getWorksheet(SHEET.EXAMS)!, 2, title);
-  });
+  }, [SHEET.EXAMS]);
+  removeCachedSheetRow("exams", title);
 }
 
 export async function removeProjectFromExcel(name: string): Promise<void> {
@@ -748,13 +867,15 @@ export async function removeProjectFromExcel(name: string): Promise<void> {
     if (!removed) {
       throw new Error(`Project not found: ${name}`);
     }
-  });
+  }, [SHEET.PROJECTS]);
+  removeCachedSheetRow("projects", name);
 }
 
 export async function removeBookFromExcel(title: string): Promise<void> {
   await withWorkbook((workbook) => {
     removeRowByColumnValue(workbook.getWorksheet(SHEET.BOOKS)!, 1, title);
-  });
+  }, [SHEET.BOOKS]);
+  removeCachedSheetRow("books", title);
 }
 
 export async function logSimpleAssignmentToExcel(title: string): Promise<void> {
@@ -767,7 +888,7 @@ export async function logSimpleAssignmentToExcel(title: string): Promise<void> {
     sheet.getRow(row).getCell(4).value = "Medium";
     sheet.getRow(row).getCell(5).value = "Not Started";
     applyRowGroupColor(sheet, row, HEADERS.assignments.length, "General");
-  });
+  }, [SHEET.ASSIGNMENTS]);
 }
 
 export async function logSimpleExamToExcel(title: string): Promise<void> {
@@ -780,7 +901,7 @@ export async function logSimpleExamToExcel(title: string): Promise<void> {
     sheet.getRow(row).getCell(4).value = 0;
     sheet.getRow(row).getCell(6).value = "Not Started";
     applyRowGroupColor(sheet, row, HEADERS.exams.length, "General");
-  });
+  }, [SHEET.EXAMS]);
 }
 
 export async function logSimpleBookToExcel(
@@ -796,7 +917,7 @@ export async function logSimpleBookToExcel(
     sheet.getRow(row).getCell(3).value = "To Read";
     sheet.getRow(row).getCell(6).value = 0;
     sheet.getRow(row).getCell(7).value = totalPages;
-  });
+  }, [SHEET.BOOKS]);
 }
 
 export async function updateBookProgressInExcel(
@@ -817,7 +938,7 @@ export async function updateBookProgressInExcel(
     } else if (currentPage > 0) {
       sheet.getRow(row).getCell(3).value = "Reading";
     }
-  });
+  }, [SHEET.BOOKS]);
 }
 
 export async function initSecondBrain(): Promise<string> {
@@ -826,11 +947,16 @@ export async function initSecondBrain(): Promise<string> {
     return "Second brain workbook already exists (template layout preserved).";
   }
   if (!exists && (await seedSecondBrainFromTemplate())) {
+    workbookExistsCache = true;
+    invalidateSheetRows();
     return "Second brain workbook created from template.";
   }
   const workbook = new ExcelJS.Workbook();
   configureWorkbookStructure(workbook);
   await writeWorkbook(workbook);
+  workbookCache = workbook;
+  workbookReady = true;
+  workbookExistsCache = true;
   return "Second brain workbook created.";
 }
 
@@ -839,6 +965,7 @@ export async function openSecondBrain(): Promise<string> {
   if (!exists) {
     return "Workbook not found. Run: brain init";
   }
+  invalidateWorkbookCache();
   return openWorkbookFile();
 }
 
@@ -871,7 +998,7 @@ export async function addAssignmentRow(args: string): Promise<string> {
     sheet.getRow(row).getCell(4).value = priority;
     sheet.getRow(row).getCell(5).value = "Not Started";
     applyRowGroupColor(sheet, row, HEADERS.assignments.length, fields.course);
-  });
+  }, [SHEET.ASSIGNMENTS]);
 
   return "Assignment added.";
 }
@@ -905,7 +1032,7 @@ export async function addExamRow(args: string): Promise<string> {
     sheet.getRow(row).getCell(4).value = weight;
     sheet.getRow(row).getCell(6).value = "Not Started";
     applyRowGroupColor(sheet, row, HEADERS.exams.length, fields.course);
-  });
+  }, [SHEET.EXAMS]);
 
   return "Exam added.";
 }
@@ -938,7 +1065,7 @@ export async function addProjectRow(args: string): Promise<string> {
     sheet.getRow(row).getCell(3).value = status;
     setDateCell(sheet.getRow(row).getCell(5), deadline);
     applyRowGroupColor(sheet, row, HEADERS.projects.length, fields.category);
-  });
+  }, [SHEET.PROJECTS]);
 
   return "Project added.";
 }
@@ -966,7 +1093,7 @@ export async function addBookRow(args: string): Promise<string> {
     sheet.getRow(row).getCell(3).value = "To Read";
     sheet.getRow(row).getCell(6).value = 0;
     sheet.getRow(row).getCell(7).value = totalPages;
-  });
+  }, [SHEET.BOOKS]);
 
   return "Book added.";
 }
@@ -1013,7 +1140,7 @@ export async function logLifeEntry(args: string): Promise<string> {
     sheet.getRow(row).getCell(5).value = studyHours;
     sheet.getRow(row).getCell(6).value = codingHours;
     sheet.getRow(row).getCell(7).value = readingPages;
-  });
+  }, [SHEET.LIFE]);
 
   return "Life entry logged.";
 }
@@ -1023,9 +1150,7 @@ export async function readSheetFormRow(
   lookupValue: string,
 ): Promise<Record<string, string>> {
   assertTemplateForm(formId);
-  await ensureWorkbookReady();
-  const workbook = await readWorkbook();
-  ensureWorkbookSheets(workbook);
+  const workbook = await getCachedWorkbook();
   const sheet = workbook.getWorksheet(sheetNameForForm(formId))!;
   const row = findEditRow(sheet, formId, lookupValue, findRowByColumnValue);
   if (!row) {
@@ -1040,7 +1165,6 @@ export async function updateSheetFormRow(
   values: Record<string, string>,
 ): Promise<void> {
   assertTemplateForm(formId);
-  const verifyKey = lookupValue;
   await withWorkbook((workbook) => {
     const sheet = workbook.getWorksheet(sheetNameForForm(formId))!;
     const row = findEditRow(sheet, formId, lookupValue, findRowByColumnValue);
@@ -1051,28 +1175,34 @@ export async function updateSheetFormRow(
       setDateCell,
       parseDueDate,
     });
-  });
-  void verifyKey;
+  }, [sheetNameForForm(formId)]);
+  updateCachedSheetRow(formId, lookupValue, values);
 }
 
 export async function listSheetFormRows(
   formId: SheetFormId,
 ): Promise<Array<{ key: string; values: Record<string, string> }>> {
-  assertTemplateForm(formId);
-  await ensureWorkbookReady();
-  const workbook = await readWorkbook();
-  ensureWorkbookSheets(workbook);
-  const sheet = workbook.getWorksheet(sheetNameForForm(formId))!;
-  const column = formId === "assignments" || formId === "exams" ? 2 : 1;
-  const rows: Array<{ key: string; values: Record<string, string> }> = [];
-  for (let row = 2; row <= 5000; row += 1) {
-    const key = sheet.getRow(row).getCell(column).text?.trim() ?? "";
-    if (!key) {
-      break;
+  return timeAsync(`excel.listRows.${formId}`, async () => {
+    assertTemplateForm(formId);
+    const cached = sheetRowsCache.get(formId);
+    if (cached) {
+      return cloneSheetRows(cached);
     }
-    rows.push({ key, values: readFormRowValues(formId, sheet, row) });
-  }
-  return rows;
+
+    const workbook = await getCachedWorkbook();
+    const sheet = workbook.getWorksheet(sheetNameForForm(formId))!;
+    const column = formId === "assignments" || formId === "exams" ? 2 : 1;
+    const rows: Array<{ key: string; values: Record<string, string> }> = [];
+    for (let row = 2; row <= 5000; row += 1) {
+      const key = sheet.getRow(row).getCell(column).text?.trim() ?? "";
+      if (!key) {
+        break;
+      }
+      rows.push({ key, values: readFormRowValues(formId, sheet, row) });
+    }
+    sheetRowsCache.set(formId, cloneSheetRows(rows));
+    return rows;
+  });
 }
 
 export async function writeSheetFormRow(
@@ -1080,7 +1210,6 @@ export async function writeSheetFormRow(
   values: Record<string, string>,
 ): Promise<void> {
   assertTemplateForm(formId);
-  const verify = buildRowVerify(formId, values);
   await withWorkbook((workbook) => {
     switch (formId) {
       case "classes": {
@@ -1195,83 +1324,8 @@ export async function writeSheetFormRow(
       default:
         throw new Error(`Unknown sheet form: ${formId satisfies never}`);
     }
-  }, verify);
-}
-
-function buildRowVerify(
-  formId: SheetFormId,
-  values: Record<string, string>,
-): WorkbookVerify | undefined {
-  switch (formId) {
-    case "classes": {
-      const course = values.course?.trim();
-      if (!course || course.toLowerCase() === NA_VALUE) {
-        return undefined;
-      }
-      return (workbook) =>
-        sheetHasColumnValue(workbook.getWorksheet(SHEET.CLASSES)!, 1, course);
-    }
-    case "assignments": {
-      const title = values.assignment?.trim();
-      if (!title || title.toLowerCase() === NA_VALUE) {
-        return undefined;
-      }
-      return (workbook) =>
-        sheetHasColumnValue(workbook.getWorksheet(SHEET.ASSIGNMENTS)!, 2, title);
-    }
-    case "exams": {
-      const title = values.examName?.trim();
-      if (!title || title.toLowerCase() === NA_VALUE) {
-        return undefined;
-      }
-      return (workbook) =>
-        sheetHasColumnValue(workbook.getWorksheet(SHEET.EXAMS)!, 2, title);
-    }
-    case "projects": {
-      const title = values.project?.trim();
-      if (!title || title.toLowerCase() === NA_VALUE) {
-        return undefined;
-      }
-      return (workbook) =>
-        sheetHasColumnValue(workbook.getWorksheet(SHEET.PROJECTS)!, 1, title);
-    }
-    case "books": {
-      const title = values.title?.trim();
-      if (!title || title.toLowerCase() === NA_VALUE) {
-        return undefined;
-      }
-      return (workbook) =>
-        sheetHasColumnValue(workbook.getWorksheet(SHEET.BOOKS)!, 1, title);
-    }
-    case "tasks": {
-      const title = values.title?.trim();
-      if (!title || title.toLowerCase() === NA_VALUE) {
-        return undefined;
-      }
-      return (workbook) =>
-        sheetHasColumnValue(workbook.getWorksheet(SHEET.TASKS)!, 1, title);
-    }
-    case "events": {
-      const title = values.title?.trim();
-      if (!title || title.toLowerCase() === NA_VALUE) {
-        return undefined;
-      }
-      return (workbook) =>
-        sheetHasColumnValue(workbook.getWorksheet(SHEET.EVENTS)!, 1, title);
-    }
-    case "notes": {
-      const title = values.title?.trim();
-      if (!title || title.toLowerCase() === NA_VALUE) {
-        return undefined;
-      }
-      return (workbook) =>
-        sheetHasColumnValue(workbook.getWorksheet(SHEET.NOTES)!, 1, title);
-    }
-    case "life":
-      return undefined;
-    default:
-      return undefined;
-  }
+  }, [sheetNameForForm(formId)]);
+  updateCachedSheetRow(formId, rowKeyForValues(formId, values), values);
 }
 
 interface PlannerTitleEntry {
@@ -1321,7 +1375,7 @@ export async function getWorkbookStatus(): Promise<string> {
     return "Workbook not found.\nRun: brain init";
   }
 
-  const workbook = await readWorkbook();
+  const workbook = await getCachedWorkbook();
   const lines = [`Workbook: ${path}`, ""];
 
   let plannerDrift = 0;
@@ -1410,7 +1464,7 @@ export async function syncPlannerToExcel(): Promise<string> {
         added.push(`Exam: ${entry.title}`);
       }
     }
-  });
+  }, [SHEET.CLASSES, SHEET.ASSIGNMENTS, SHEET.EXAMS]);
 
   if (added.length === 0) {
     return "Excel is already up to date with planner.";

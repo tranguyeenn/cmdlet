@@ -63,6 +63,7 @@ export async function completeSheetRowEditPrompt(
   finish: (
     lookupKey: string,
     values: Record<string, string>,
+    previousValues?: Record<string, string>,
   ) => Promise<CommandResult>,
 ): Promise<CommandResult> {
   const { lookup, updates } = parseEditArgs(formId, args);
@@ -86,10 +87,10 @@ export async function completeSheetRowEditPrompt(
   // the pipe syntax. Otherwise walk every field so the user can review each one —
   // Enter keeps the current value.
   if (shouldSkipWalk(formId, updates)) {
-    return finish(resolvedLookup, merged);
+    return finish(resolvedLookup, merged, existing);
   }
 
-  return buildEditPromptResult(formId, resolvedLookup, 0, merged, finish);
+  return buildEditPromptResult(formId, resolvedLookup, 0, merged, finish, existing);
 }
 
 /** Parse `entity edit ...` args where action is already stripped. */

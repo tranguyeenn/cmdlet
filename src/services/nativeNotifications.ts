@@ -1,6 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
 import { loadSettings } from "../storage/settingsStore";
 import { listSheetFormRows } from "./secondBrain";
+import { timeAsync } from "../lib/perf";
+import { timedInvoke } from "../lib/timedInvoke";
 
 const WATER_INTERVAL_MS = 60 * 60 * 1000;
 const DUE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -82,7 +83,7 @@ async function showNotification(
   urgent = false,
 ): Promise<void> {
   try {
-    await invoke("notify", { title, body, urgent });
+    await timedInvoke("notify", { title, body, urgent }, "notifications.show");
   } catch {
     // Notifications should never block the app.
   }
@@ -98,13 +99,14 @@ async function notifyWaterIfEnabled(): Promise<void> {
 }
 
 async function notifyDueItemsIfEnabled(): Promise<void> {
-  const settings = await loadSettings();
-  if (!settings.dueRemindersEnabled) {
-    return;
-  }
+  await timeAsync("notifications.dueScan", async () => {
+    const settings = await loadSettings();
+    if (!settings.dueRemindersEnabled) {
+      return;
+    }
 
-  const notified = loadNotifiedKeys();
-  const day = todayKey();
+    const notified = loadNotifiedKeys();
+    const day = todayKey();
 
   const assignments = await listSheetFormRows("assignments");
   for (const row of assignments) {
@@ -202,7 +204,8 @@ async function notifyDueItemsIfEnabled(): Promise<void> {
     notified.add(key);
   }
 
-  saveNotifiedKeys(notified);
+    saveNotifiedKeys(notified);
+  });
 }
 
 async function runDueCheck(): Promise<void> {
@@ -228,7 +231,9 @@ export function checkDueNotifications(): void {
 
 /** Start hourly water reminders and due-date notifications. */
 export function startNativeNotificationScheduler(): void {
-  void runDueCheck();
+  window.setTimeout(() => {
+    void runDueCheck();
+  }, 3000);
 
   window.setInterval(() => {
     void runWaterCheck();

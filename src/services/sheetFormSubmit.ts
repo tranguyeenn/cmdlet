@@ -9,8 +9,9 @@ import {
   readSheetFormRow,
   writeSheetFormRow,
   updateSheetFormRow,
+  updateCachedSheetRow,
 } from "./secondBrain";
-import { syncDueRemindersQuiet, syncTaskReminder } from "./dueReminders";
+import { timeAsync } from "../lib/perf";
 
 const NA = "n/a";
 
@@ -158,6 +159,7 @@ export async function submitTaskRow(
     return excelErrorMessage(error);
   }
 
+  const { syncTaskReminder } = await import("./dueReminders");
   await syncTaskReminder(values);
 
   return `Added task: ${title} [${category}] (logged to Excel)`;
@@ -226,8 +228,14 @@ function fieldLabel(value: string | undefined): string {
   return trimmed && trimmed.toLowerCase() !== NA ? trimmed : NA;
 }
 
+function isTaskCompletion(values: Record<string, string>): boolean {
+  const status = values.status?.trim().toLowerCase() ?? "";
+  return status === "done" || status === "finished";
+}
+
 async function afterDataChange(): Promise<void> {
-  await syncDueRemindersQuiet();
+  // Full due-reminder reconciliation scans multiple workbook sheets. Keep it
+  // explicit via `alert sync` so normal Excel commands stay responsive.
 }
 
 async function updateRow(
@@ -355,6 +363,7 @@ export async function updateBookRow(
 export async function updateTaskRow(
   lookupKey: string,
   values: Record<string, string>,
+  previousValues?: Record<string, string>,
 ): Promise<CommandResult> {
   const settings = await loadSettings();
   if (!settings.remindersEnabled) {
@@ -372,13 +381,29 @@ export async function updateTaskRow(
 
   let previous: Record<string, string> | undefined;
   try {
-    previous = await readSheetFormRow("tasks", lookupKey);
-    await updateSheetFormRow("tasks", lookupKey, values);
+    previous = previousValues ?? await readSheetFormRow("tasks", lookupKey);
   } catch (error) {
     return excelErrorMessage(error);
   }
 
-  await syncTaskReminder(values, previous);
+  if (isTaskCompletion(values)) {
+    updateCachedSheetRow("tasks", lookupKey, values);
+    void timeAsync("taskCompletion.persistAsync", async () => {
+      const { syncTaskReminder } = await import("./dueReminders");
+      await updateSheetFormRow("tasks", lookupKey, values);
+      await syncTaskReminder(values, previous);
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Task completion persistence failed for ${lookupKey}: ${message}`);
+    });
+    return `Updated task: ${title} [${category}] (saving in background)`;
+  }
+
+  await timeAsync("taskCompletion.persist", async () => {
+    const { syncTaskReminder } = await import("./dueReminders");
+    await updateSheetFormRow("tasks", lookupKey, values);
+    await syncTaskReminder(values, previous);
+  });
 
   return `Updated task: ${title} [${category}] (updated in Excel)`;
 }

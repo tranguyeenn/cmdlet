@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { timedInvoke } from "../lib/timedInvoke";
 
 export interface AppSettings {
   browser: string;
@@ -13,13 +13,13 @@ export interface AppSettings {
 }
 
 export async function loadSettings(): Promise<AppSettings> {
-  return invoke<AppSettings>("load_settings");
+  return timedInvoke<AppSettings>("load_settings", undefined, "storage.read.settings");
 }
 
 export async function saveSettings(settings: AppSettings): Promise<AppSettings> {
-  return invoke<AppSettings>("save_settings", { settings });
+  return timedInvoke<AppSettings>("save_settings", { settings }, "storage.write.settings");
 }
 
 export async function updateSetting(key: string, value: string): Promise<AppSettings> {
-  return invoke<AppSettings>("update_setting", { key, value });
+  return timedInvoke<AppSettings>("update_setting", { key, value }, "storage.write.settings");
 }

@@ -4,7 +4,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Command, CommandResult } from "../types";
 import { submitExamRow, updateExamRow } from "../services/sheetFormSubmit";
-import { syncDueRemindersQuiet } from "../services/dueReminders";
 import { syncExamDelete, withExcelWarning } from "../services/excelSync";
 import { completeSheetRowPrompt } from "../utils/excelRowPrompt";
 import { completeSheetRowEditPrompt } from "../utils/sheetEditPrompt";
@@ -62,9 +61,6 @@ export const examCommand: Command = {
         }
         const message = await invoke<string>("delete_exam", { title: rest });
         const excelError = await syncExamDelete(rest);
-        if (!excelError) {
-          await syncDueRemindersQuiet();
-        }
         return withExcelWarning(message, excelError);
       }
 

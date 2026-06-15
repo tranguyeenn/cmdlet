@@ -1,58 +1,58 @@
 /**
- * Command registry. Import new commands here to make them available in the palette.
+ * Lightweight command registry. Keep this file free of command implementation
+ * imports so help/autocomplete do not pull Excel, Reminders, or Calendar code
+ * into the initial app load.
  */
 import type { Command } from "../types";
+import { timeAsync } from "../lib/perf";
+import { loadCommand } from "./loaders";
 import {
-  catalogCommands,
-  brainCommand,
-  lifeCommand,
-  projectCommand,
-  reminderCommand,
-  spotifyCommand,
-  webCommand,
-} from "./catalog";
+  allCommandSpecs,
+  commandAliases,
+  commandSpecs,
+  resolveCommandSpec,
+  type CommandSpec,
+} from "./specs";
 import { groupCommandsByCategory } from "./group";
-import { helpCommand } from "./help";
 
-export const commandCategories = groupCommandsByCategory([
-  ...catalogCommands,
-  helpCommand,
-]);
+export const commandCategories = groupCommandsByCategory(commandSpecs);
+export const commands: CommandSpec[] = commandSpecs;
 
-export const commands: Command[] = [...catalogCommands, helpCommand];
-
-/** All registered commands (includes help). */
-export function allCommands(): Command[] {
-  return [...catalogCommands, helpCommand];
+/** All registered command metadata (includes help). */
+export function allCommands(): CommandSpec[] {
+  return allCommandSpecs();
 }
 
-/** Legacy command names kept for compatibility. */
-export const commandAliases = new Map<string, Command>([
-  ["sp", spotifyCommand],
-  ["search", webCommand],
-  ["remind", reminderCommand],
-]);
+/** Resolve command metadata by name or alias. */
+export function resolveCommand(name: string): CommandSpec | undefined {
+  return resolveCommandSpec(name);
+}
 
-/** Resolve a command by name (rebuilt each call so dev HMR picks up new commands). */
-export function resolveCommand(name: string): Command | undefined {
-  const lower = name.toLowerCase();
-  const alias = commandAliases.get(lower);
-  if (alias) {
-    return alias;
+/** Load the executable command implementation by name or alias. */
+export async function resolveExecutableCommand(name: string): Promise<Command | undefined> {
+  const spec = resolveCommandSpec(name);
+  if (!spec) {
+    return undefined;
   }
-  return allCommands().find((command) => command.name === lower);
+
+  const command = loadCommand(spec.name);
+  if (!command) {
+    return undefined;
+  }
+
+  return timeAsync(`command.load.${spec.name}`, () => command);
 }
 
-/** Lookup map for fast command resolution by name. */
-export function getCommandMap(): Map<string, Command> {
+/** Lookup map for metadata by name. */
+export function getCommandMap(): Map<string, CommandSpec> {
   return new Map([
     ...commands.map((command) => [command.name, command] as const),
-    ...commandAliases.entries(),
+    ...[...commandAliases.entries()].map(([alias, canonical]) => [
+      alias,
+      resolveCommandSpec(canonical)!,
+    ] as const),
   ]);
 }
 
 /** @deprecated Use resolveCommand() — kept for autocomplete. */
 export const commandMap = getCommandMap();
-
-export { helpCommand } from "./help";
-export { brainCommand, lifeCommand, projectCommand };
